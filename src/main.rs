@@ -205,7 +205,7 @@ fn decode_name(bytes: &[u8]) -> String {
 }
 
 fn main() -> Result<()> {
-    println!("PNIDGrab by jerrysm64 (Jerry).");
+    println!("PNIDGrab 1.0.1 by jerrysm64 (Jerry)");
 
     let pid = find_cemu_process()?;
     let regions = parse_maps(pid)?;
@@ -220,7 +220,7 @@ fn main() -> Result<()> {
     }
 
     println!("Player X: PID (Hex)| PID (Dec)  | PNID             | Name");
-    println!("-------------------------------------------------------------");
+    println!("---------------------------------------------------------------");
 
     let ptr1 = proc_mem.read_u32(0x101DD330)?;
     let ptr2 = proc_mem.read_u32(ptr1 + 0x10)?;
@@ -234,12 +234,17 @@ fn main() -> Result<()> {
         let name_bytes = proc_mem.read_bytes(player_ptr + 0x6, 32)?;
         let name = decode_name(&name_bytes);
         let pid_raw = proc_mem.read_u32(player_ptr + 0xD0)?;
+        let pid_bytes = pid_raw.to_le_bytes();
+        let pid_hex = format!(
+            "{:02X}{:02X}{:02X}{:02X}",
+            pid_bytes[0], pid_bytes[1], pid_bytes[2], pid_bytes[3]
+        );
         let nnid = get_pnid(pid_raw as i32);
         let nnid_str = format!("{:<16}", nnid);
 
         println!(
-            "Player {}: {:08X} | {:<10} | {} | {}",
-            i, pid_raw, pid_raw, nnid_str, name
+            "Player {}: {} | {:<10} | {} | {}",
+            i, pid_hex, pid_raw, nnid_str, name
         );
     }
 
