@@ -1,6 +1,9 @@
 # PNIDGrab
 A CLI PID and PNID grabber for Splatoon 2.12.1 (v288) on Cemu
 
+
+![image](https://github.com/user-attachments/assets/dca9be5d-863f-48bf-904e-c9c9f167787e)
+
 ## Output
 The output contains the following:
 - Player's index and name
@@ -8,8 +11,6 @@ The output contains the following:
 - Player's PNID (fetched from the API)
 - Session ID
 - Fetch date (when the tool was run)
-
-![image](https://github.com/user-attachments/assets/dca9be5d-863f-48bf-904e-c9c9f167787e)
 
 ## Build yourself
 You'll need the Rust toolchain, cc and openssl to compile the tool.
