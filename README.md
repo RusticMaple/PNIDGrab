@@ -1,8 +1,7 @@
 # PNIDGrab
 A CLI PID and PNID grabber for Splatoon 2.12.1 (v288) on Cemu
 
-
-![image](https://github.com/user-attachments/assets/dca9be5d-863f-48bf-904e-c9c9f167787e)
+![image](https://github.com/user-attachments/assets/31db40d0-0235-4ac4-9b79-689fdf9660cc)
 
 ## Output
 The output contains the following:
