@@ -82,4 +82,6 @@ As this tool needs access to another process' memory, it may need to be run as r
 sudo ./pnidgrab
 ```
 ## Credits
-* [c8ff](https://github.com/c8ff) for finding the addresses in Cemu's memory
+* [c8ff](https://github.com/c8ff) for finding a method to get Cemu's base address without reading the log file
+* [javiig8](https://github.com/javiig8) for finding the addresses to get Name and PID
+* [Tombuntu](https://github.com/ReXiSp) for finding the address to get the Session ID

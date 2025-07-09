@@ -1,4 +1,7 @@
-// Credits where credits due: c8ff for finding the addresses
+// Credits where credits due: 
+// - c8ff for finding the Cemu base adress
+// - javiig8 for finding the adresses for PID and Name
+// - ReXiSp for finding the address for the Session ID
 
 use anyhow::{anyhow, Context, Result};
 use libc::{c_void, iovec, process_vm_readv};
