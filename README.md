@@ -81,4 +81,5 @@ As this tool needs access to another process' memory, it may need to be run as r
 ```bash
 sudo ./pnidgrab
 ```
-
+## Credits
+* [c8ff](https://github.com/c8ff) for finding the addresses in Cemu's memory

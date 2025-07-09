@@ -1,3 +1,5 @@
+// Credits where credits due: c8ff for finding the addresses
+
 use anyhow::{anyhow, Context, Result};
 use libc::{c_void, iovec, process_vm_readv};
 use reqwest::blocking::Client;
