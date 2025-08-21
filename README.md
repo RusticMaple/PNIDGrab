@@ -12,6 +12,8 @@ The output contains the following:
 - Fetch date (when the tool was run)
 
 ## Build yourself
+TODO: Add Windows and macOS instructions 
+
 You'll need the Rust toolchain, cc and openssl to compile the tool.
 
 ### Installing dependencies
@@ -85,3 +87,6 @@ sudo ./pnidgrab
 * [c8ff](https://github.com/c8ff) for finding a method to get Cemu's base address without reading the log file
 * [javiig8](https://github.com/javiig8) for finding the addresses to get Name and PID
 * [Tombuntu](https://github.com/ReXiSp) for finding the address to get the Session ID
+* [CrafterPika](https://github.com/CrafterPika/) for helping with the implementations for macOS and Windows
+* [RusticMaple](https://github.com/RusticMaple) for the idea how to split platforms without anything clashing
+
