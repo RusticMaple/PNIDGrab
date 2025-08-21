@@ -1,4 +1,4 @@
-// Credits where credits due: 
+// Credits where credits due:
 // - c8ff for finding the Cemu base adress
 // - javiig8 for finding the adresses for PID and Name
 // - ReXiSp for finding the address for the Session ID
@@ -210,7 +210,7 @@ fn decode_name(bytes: &[u8]) -> String {
 }
 
 fn main() -> Result<()> {
-    println!("PNIDGrab 1.0.1 by jerrysm64 (Jerry)");
+    println!("PNIDGrab 1.0.2 by jerrysm64 (Jerry)");
 
     let pid = find_cemu_process()?;
     let regions = parse_maps(pid)?;
