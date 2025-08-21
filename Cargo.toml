@@ -4,8 +4,32 @@ version = "1.0.2"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.99"
 chrono = "0.4.41"
+<<<<<<< HEAD
+=======
+cfg-if = "1.0.3"
+>>>>>>> aa668cc (Windows and macOS Support)
 libc = "0.2.175"
-reqwest = { version = "0.12.22", features = ["blocking"] }
+reqwest = { version = "0.12.23", features = ["blocking"] }
 roxmltree = "0.20.0"
+<<<<<<< HEAD
+=======
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libproc = "0.14.10"
+
+[target.'cfg(windows)'.dependencies.winapi]
+version = "0.3.9" 
+features = [
+  "winnt",
+  "processthreadsapi",
+  "memoryapi",
+  "psapi",
+  "winerror",
+  "tlhelp32",
+  "handleapi",
+  "errhandlingapi",
+  "libloaderapi"
+]
+>>>>>>> aa668cc (Windows and macOS Support)
