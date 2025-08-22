@@ -16,7 +16,7 @@ use super::ProcessMemory;
 use libproc::libproc::proc_pid;
 use libproc::processes;
 
-const TARGET_NAMES: &[&str] = &["cemu", "cemu_release", "xapfish", ".cemu-wrapped"];
+const TARGET_NAMES: &[&str] = &["cemu", "cemu_release"];
 const PATTERN: [u8; 3] = [0x02, 0xD4, 0xE7];
 const VM_REGION_BASIC_INFO_COUNT_64: u32 = 10;
 const PROBE_OFFSET: u64 = 0x0E00_0000;
