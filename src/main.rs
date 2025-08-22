@@ -72,7 +72,7 @@ fn decode_name(bytes: &[u8]) -> String {
 }
 
 fn main() -> Result<()> {
-    println!("PNIDGrab 2.0.0 by jerrysm64 (Jerry)");
+    println!("PNIDGrab 2.1.0 by jerrysm64 (Jerry)");
 
     let pid = find_cemu_process()?;
 
