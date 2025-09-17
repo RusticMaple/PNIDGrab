@@ -1,29 +1,45 @@
-// Credits where credits due:
-// - c8ff for finding the Cemu base address
-// - javiig8 for finding the addresses for PID and Name
-// - ReXiSp for finding the address for the Session ID
-// - CrafterPika for helping me with the macOS and Windows implementations
-// - RusticMaple for the idea how to split platforms without anything clashing
-
 use anyhow::Result;
-use chrono::Local;
-use platform::{ProcessMemory, find_cemu_process};
-use reqwest::blocking::Client;
+use chrono::{DateTime, Local};
 use roxmltree::Document;
-use std::time::SystemTime;
+use reqwest::blocking::Client;
 
 mod platform;
+mod gui;
+
+use platform::{find_cemu_process};
+use platform::ProcessMemory;
+
+#[cfg(target_os = "linux")]
+use platform::LinuxProcessMemory as PlatformProcessMemory;
+
+#[cfg(target_os = "windows")]
+use platform::WindowsProcessMemory as PlatformProcessMemory;
+
+#[cfg(target_os = "macos")]
+use platform::MacProcessMemory as PlatformProcessMemory;
+
+#[derive(Debug, Clone)]
+pub struct PlayerRecord {
+    pub index: u8,
+    pub pid_hex: String,
+    pub pid_dec: u32,
+    pub pnid: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct FetchResult {
+    pub players: Vec<PlayerRecord>,
+    pub session_id: Option<u32>,
+    pub fetched_at: DateTime<Local>,
+}
 
 fn get_pnid(pid: i32) -> String {
-    let client = match Client::builder()
-        .user_agent("Mozilla/5.0")
-        .build()
-    {
+    let client = match Client::builder().user_agent("Mozilla/5.0").build() {
         Ok(c) => c,
         Err(_) => return "0".to_string(),
     };
 
-    // API key src: https://github.com/kinnay/NintendoClients/wiki/Account-Server
     let url = format!("http://account.pretendo.cc/v1/api/miis?pids={}", pid);
     let response = match client
         .get(&url)
@@ -36,17 +52,17 @@ fn get_pnid(pid: i32) -> String {
     };
 
     if !response.status().is_success() {
-        return "0".to_string();
+        return "0".to_string()
     }
 
     let body = match response.text() {
         Ok(b) => b,
-        Err(_) => return "0".to_string(),
+        Err(_) => return "0".to_string()
     };
 
     let doc = match Document::parse(&body) {
         Ok(d) => d,
-        Err(_) => return "0".to_string(),
+        Err(_) => return "0".to_string()
     };
 
     doc.descendants()
@@ -71,22 +87,12 @@ fn decode_name(bytes: &[u8]) -> String {
         .replace(['\n', '\r'], "")
 }
 
-fn main() -> Result<()> {
-    println!("PNIDGrab 2.1.0 by jerrysm64 (Jerry)");
-
+pub fn fetch_all() -> Result<FetchResult> {
     let pid = find_cemu_process()?;
 
-    #[cfg(target_os = "linux")]
-    let proc_mem = platform::LinuxProcessMemory::new(pid)?;
+    let proc_mem = PlatformProcessMemory::new(pid)?;
 
-    #[cfg(target_os = "windows")]
-    let proc_mem = platform::WindowsProcessMemory::new(pid)?;
-
-    #[cfg(target_os = "macos")]
-    let proc_mem = platform::MacProcessMemory::new(pid)?;
-
-    println!("Player X: PID (Hex)| PID (Dec)  | PNID             | Name");
-    println!("---------------------------------------------------------------");
+    let mut players: Vec<PlayerRecord> = Vec::new();
 
     let ptr1 = proc_mem.read_u32(0x101DD330)?;
     let ptr2 = proc_mem.read_u32(ptr1 + 0x10)?;
@@ -94,6 +100,13 @@ fn main() -> Result<()> {
     for i in 0..8 {
         let player_ptr = proc_mem.read_u32(ptr2 + (i * 4))?;
         if player_ptr == 0 {
+            players.push(PlayerRecord {
+                index: i as u8,
+                pid_hex: "00000000".to_string(),
+                pid_dec: 0,
+                pnid: "0".to_string(),
+                name: "????????".to_string(),
+            });
             continue;
         }
 
@@ -106,26 +119,34 @@ fn main() -> Result<()> {
             pid_bytes[0], pid_bytes[1], pid_bytes[2], pid_bytes[3]
         );
         let nnid = get_pnid(pid_raw as i32);
-        let nnid_str = format!("{:<16}", nnid);
 
-        println!(
-            "Player {}: {} | {:<10} | {} | {}",
-            i, pid_hex, pid_raw, nnid_str, name
-        );
+        players.push(PlayerRecord {
+            index: i as u8,
+            pid_hex,
+            pid_dec: pid_raw,
+            pnid: nnid,
+            name,
+        });
     }
 
     let ptr = proc_mem.read_u32(0x101E8980)?;
-    if ptr != 0 {
+    let session_id = if ptr != 0 {
         let index = proc_mem.read_u8(ptr + 0xBD)?;
         let session_id = proc_mem.read_u32(ptr + index as u32 + 0xCC)?;
-        println!("\nSession ID: {:08X} (Dec: {})", session_id, session_id);
+        Some(session_id)
     } else {
-        println!("\nSession ID: None");
-    }
+        None
+    };
 
-    let _now = SystemTime::now();
     let datetime = Local::now();
-    println!("\nFetched at: {}", datetime.format("%Y-%m-%d %H:%M:%S"));
 
-    Ok(())
+    Ok(FetchResult {
+        players,
+        session_id,
+        fetched_at: datetime,
+    })
+}
+
+fn main() -> Result<()> {
+    gui::run_app()
 }

@@ -1,15 +1,18 @@
 [package]
 name = "pnidgrab"
-version = "2.1.0"
+version = "3.0.0"
 edition = "2024"
 
 [dependencies]
 anyhow = "1.0.99"
-chrono = "0.4.41"
+chrono = "0.4.42"
 cfg-if = "1.0.3"
 libc = "0.2.175"
 reqwest = { version = "0.12.23", features = ["blocking"] }
 roxmltree = "0.20.0"
+gtk4 = "0.10.0"
+libadwaita = "0.8.0"
+gio = "0.21.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libproc = "0.14.10"
