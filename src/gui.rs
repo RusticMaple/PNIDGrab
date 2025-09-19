@@ -1,12 +1,180 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use gtk4::prelude::*;
 use libadwaita as adw;
 use gtk4::glib;
 use libadwaita::prelude::AdwApplicationWindowExt;
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::io::{Read, Write};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 use crate::fetch_all;
 
+pub fn maybe_run_helper() -> bool {
+    if std::env::args().any(|a| a == "--helper") {
+        let sock_path = "/tmp/pnidgrab.sock";
+        let _ = std::fs::remove_file(sock_path);
+        let listener = match UnixListener::bind(sock_path) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("Failed to bind helper socket: {e}");
+                return true;
+            }
+        };
+        for stream in listener.incoming() {
+            if let Ok(mut s) = stream {
+                if let Ok(result) = fetch_all() {
+                    let json = serde_json::to_string(&result).unwrap_or_else(|_| "{}".into());
+                    let _ = s.write_all(json.as_bytes());
+                } else {
+                    let _ = s.write_all(b"{}");
+                }
+            }
+        }
+        return true;
+    }
+    false
+}
+
+fn get_password() -> Option<String> {
+    #[cfg(target_os = "macos")] {
+        let output = Command::new("/usr/bin/osascript")
+            .args([
+                "-e",
+                r#"tell application "System Events""#,
+                "-e",
+                r#"activate"#,
+                "-e",
+                r#"set dlg to display dialog "PNIDGrab needs your administrator password to read process memory." with title "PNIDGrab" default answer "" with icon caution buttons {"OK"} default button "OK" with hidden answer"#,
+                "-e",
+                r#"text returned of dlg"#,
+                "-e",
+                r#"end tell"#,
+            ])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let mut pw = String::from_utf8_lossy(&output.stdout).to_string();
+        while pw.ends_with('\n') || pw.ends_with('\r') {
+            pw.pop();
+        }
+        return if pw.is_empty() { None } else { Some(pw) };
+    }
+
+    #[cfg(target_os = "linux")] {
+        if let Ok(output) = Command::new("zenity")
+            .args([
+                "--password",
+                "--title=PNIDGrab",
+                "--text=PNIDGrab needs root to read process memory.",
+            ])
+            .output()
+        {
+            if output.status.success() {
+                let mut pw = String::from_utf8_lossy(&output.stdout).to_string();
+                while pw.ends_with('\n') || pw.ends_with('\r') {
+                    pw.pop();
+                }
+                if !pw.is_empty() {
+                    return Some(pw);
+                }
+            }
+        }
+
+        if let Ok(output) = Command::new("kdialog")
+            .args([
+                "--title",
+                "PNIDGrab",
+                "--password",
+                "PNIDGrab needs root to read process memory.",
+            ])
+            .output()
+        {
+            if output.status.success() {
+                let mut pw = String::from_utf8_lossy(&output.stdout).to_string();
+                while pw.ends_with('\n') || pw.ends_with('\r') {
+                    pw.pop();
+                }
+                if !pw.is_empty() {
+                    return Some(pw);
+                }
+            }
+        }
+
+        eprint!("Password (will be echoed): ");
+        let _ = std::io::stderr().flush();
+        let mut pw = String::new();
+        if std::io::stdin().read_line(&mut pw).is_ok() {
+            while pw.ends_with('\n') || pw.ends_with('\r') {
+                pw.pop();
+            }
+            if !pw.is_empty() {
+                return Some(pw);
+            }
+        }
+        return None;
+    }
+
+    #[allow(unreachable_code)]
+    None
+}
+
+fn start_privileged_helper() -> Result<()> {
+    let Some(password) = get_password() else {
+        anyhow::bail!("Password prompt was cancelled or failed");
+    };
+
+    let exe = std::env::current_exe().context("current_exe failed")?;
+
+    let mut child = Command::new("sudo")
+        .arg("-S")
+        .arg("--")
+        .arg(exe)
+        .arg("--helper")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("failed to spawn sudo helper")?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = write!(stdin, "{}\n", password);
+        let _ = stdin.flush();
+    }
+
+    Ok(())
+}
+
+fn request_fetch_via_helper() -> Result<crate::FetchResult> {
+    let mut retries = 0;
+    loop {
+        match UnixStream::connect("/tmp/pnidgrab.sock") {
+            Ok(mut s) => {
+                let mut buf = String::new();
+                s.read_to_string(&mut buf)?;
+                return Ok(serde_json::from_str(&buf)?);
+            }
+            Err(_) if retries < 10 => {
+                retries += 1;
+                thread::sleep(Duration::from_millis(300));
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+}
+
 pub fn run_app() -> Result<()> {
+    if maybe_run_helper() {
+        return Ok(());
+    }
+
+    if nix::unistd::geteuid().as_raw() != 0 {
+        let _ = start_privileged_helper();
+    }
+
     let app = adw::Application::builder()
         .application_id("dev.jerrysm64.pnidgrab")
         .build();
@@ -41,7 +209,7 @@ fn build_ui(app: &adw::Application) {
         }
         "#,
     );
-    
+
     if let Some(display) = gtk4::gdk::Display::default() {
         gtk4::style_context_add_provider_for_display(
             &display,
@@ -53,7 +221,7 @@ fn build_ui(app: &adw::Application) {
     let toast_overlay = adw::ToastOverlay::new();
     
     let header_bar = adw::HeaderBar::new();
-    
+
     let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
     vbox.set_margin_start(12);
     vbox.set_margin_end(12);
@@ -104,11 +272,9 @@ fn build_ui(app: &adw::Application) {
     bottom_box.append(&timestamp_label);
 
     let fetch_button = gtk4::Button::with_label("Fetch");
-    fetch_button.set_hexpand(false);
     fetch_button.add_css_class("large-font");
 
     let copy_button = gtk4::Button::with_label("Copy");
-    copy_button.set_hexpand(false);
     copy_button.add_css_class("large-font");
 
     let button_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
@@ -136,152 +302,69 @@ fn build_ui(app: &adw::Application) {
     let session_id_data = std::rc::Rc::new(std::cell::RefCell::new(None));
     let timestamp_data = std::rc::Rc::new(std::cell::RefCell::new(String::new()));
 
-    {
-        let list_store = list_store.clone();
-        let session_label = session_label.clone();
-        let timestamp_label = timestamp_label.clone();
-        let fetch_button = fetch_button.clone();
-        let player_data = player_data.clone();
-        let session_id_data = session_id_data.clone();
-        let timestamp_data = timestamp_data.clone();
-        
-        fetch_button.set_sensitive(false);
-        
-        glib::idle_add_local(move || {
-            match fetch_all() {
-                Ok(result) => {
-                    list_store.clear();
-                    
-                    let mut player_data = player_data.borrow_mut();
-                    *player_data = result.players.clone();
-                    
-                    let mut session_id_data = session_id_data.borrow_mut();
-                    *session_id_data = result.session_id;
-                    
-                    let mut timestamp_data = timestamp_data.borrow_mut();
-                    *timestamp_data = result.fetched_at.format("%Y-%m-%d %H:%M:%S").to_string();
-
-                    for p in result.players.iter() {
-                        let iter = list_store.append();
-                        list_store.set(&iter, &[
-                            (0, &p.index),
-                            (1, &p.pid_hex),
-                            (2, &p.pid_dec),
-                            (3, &p.pnid),
-                            (4, &p.name),
-                        ]);
-                    }
-
-                    match result.session_id {
-                        Some(sid) => {
-                            session_label.set_label(&format!("Session ID: {:08X} (Dec: {})", sid, sid));
-                        }
-                        None => session_label.set_label("Session ID: None"),
-                    }
-
-                    timestamp_label.set_label(&format!("Fetched at: {}", result.fetched_at.format("%Y-%m-%d %H:%M:%S")));
-                    fetch_button.set_sensitive(true);
-                }
-                Err(e) => {
-                    eprintln!("Initial fetch error: {}", e);
-                    fetch_button.set_sensitive(true);
-                }
-            }
-            glib::ControlFlow::Break
-        });
-    }
-
     let list_store_clone = list_store.clone();
     let session_label_clone = session_label.clone();
     let timestamp_label_clone = timestamp_label.clone();
-    let fetch_button_clone = fetch_button.clone();
+    let _fetch_button_clone = fetch_button.clone();
     let player_data_clone = player_data.clone();
     let session_id_data_clone = session_id_data.clone();
     let timestamp_data_clone = timestamp_data.clone();
-    
-    fetch_button.connect_clicked(move |btn| {
-        let list_store = list_store_clone.clone();
-        let session_label = session_label_clone.clone();
-        let timestamp_label = timestamp_label_clone.clone();
-        let fetch_button = fetch_button_clone.clone();
-        let player_data = player_data_clone.clone();
-        let session_id_data = session_id_data_clone.clone();
-        let timestamp_data = timestamp_data_clone.clone();
-        
-        btn.set_sensitive(false);
-        
-        glib::idle_add_local(move || {
-            match fetch_all() {
-                Ok(result) => {
-                    list_store.clear();
-                    
-                    let mut player_data = player_data.borrow_mut();
-                    *player_data = result.players.clone();
-                    
-                    let mut session_id_data = session_id_data.borrow_mut();
-                    *session_id_data = result.session_id;
-                    
-                    let mut timestamp_data = timestamp_data.borrow_mut();
-                    *timestamp_data = result.fetched_at.format("%Y-%m-%d %H:%M:%S").to_string();
 
-                    for p in result.players.iter() {
-                        let iter = list_store.append();
-                        list_store.set(&iter, &[
-                            (0, &p.index),
-                            (1, &p.pid_hex),
-                            (2, &p.pid_dec),
-                            (3, &p.pnid),
-                            (4, &p.name),
-                        ]);
-                    }
+    let fetch_logic = move || {
+        match request_fetch_via_helper().or_else(|_| fetch_all()) {
+            Ok(result) => {
+                list_store_clone.clear();
+                let mut pd = player_data_clone.borrow_mut();
+                *pd = result.players.clone();
+                *session_id_data_clone.borrow_mut() = result.session_id;
+                *timestamp_data_clone.borrow_mut() = result.fetched_at.format("%Y-%m-%d %H:%M:%S").to_string();
 
-                    match result.session_id {
-                        Some(sid) => {
-                            session_label.set_label(&format!("Session ID: {:08X} (Dec: {})", sid, sid));
-                        }
-                        None => session_label.set_label("Session ID: None"),
-                    }
-
-                    timestamp_label.set_label(&format!("Fetched at: {}", result.fetched_at.format("%Y-%m-%d %H:%M:%S")));
-                    fetch_button.set_sensitive(true);
+                for p in result.players.iter() {
+                    let iter = list_store_clone.append();
+                    list_store_clone.set(&iter, &[
+                        (0, &p.index),
+                        (1, &p.pid_hex),
+                        (2, &p.pid_dec),
+                        (3, &p.pnid),
+                        (4, &p.name),
+                    ]);
                 }
-                Err(e) => {
-                    eprintln!("Fetch error: {}", e);
-                    fetch_button.set_sensitive(true);
+                match result.session_id {
+                    Some(sid) => session_label_clone.set_label(&format!("Session ID: {:08X} (Dec: {})", sid, sid)),
+                    None => session_label_clone.set_label("Session ID: None"),
                 }
+                timestamp_label_clone.set_label(&format!("Fetched at: {}", result.fetched_at.format("%Y-%m-%d %H:%M:%S")));
             }
-            glib::ControlFlow::Break
-        });
-    });
+            Err(e) => eprintln!("Fetch error: {}", e),
+        }
+        glib::ControlFlow::Break
+    };
+
+    glib::idle_add_local(fetch_logic.clone());
+    fetch_button.connect_clicked(move |_| { glib::idle_add_local(fetch_logic.clone()); });
 
     let player_data_copy = player_data.clone();
     let session_id_data_copy = session_id_data.clone();
     let timestamp_data_copy = timestamp_data.clone();
     let toast_overlay_clone = toast_overlay.clone();
     let win_clone = win.clone();
-    
+
     copy_button.connect_clicked(move |_| {
         let mut copy_text = String::new();
-        
-        let player_data = player_data_copy.borrow();
-        for p in player_data.iter() {
-            copy_text.push_str(&format!("Player {}: PID (Hex: {}, Dec: {}), PNID: {}, Name: {}\n", 
+        for p in player_data_copy.borrow().iter() {
+            copy_text.push_str(&format!("Player {}: PID (Hex: {}, Dec: {}), PNID: {}, Name: {}\n",
                 p.index, p.pid_hex, p.pid_dec, p.pnid, p.name));
         }
-        
-        let session_id_data = session_id_data_copy.borrow();
-        if let Some(sid) = *session_id_data {
+        if let Some(sid) = *session_id_data_copy.borrow() {
             copy_text.push_str(&format!("Session ID: {:08X} (Dec: {})\n", sid, sid));
         } else {
             copy_text.push_str("Session ID: None\n");
         }
-        
-        let timestamp_data = timestamp_data_copy.borrow();
-        copy_text.push_str(&format!("Fetched at: {}\n", *timestamp_data));
-        
+        copy_text.push_str(&format!("Fetched at: {}\n", *timestamp_data_copy.borrow()));
+
         let clipboard = win_clone.clipboard();
         clipboard.set_text(&copy_text);
-        
+
         let toast = adw::Toast::new("Data copied to clipboard!");
         toast.set_timeout(2);
         toast_overlay_clone.add_toast(toast);

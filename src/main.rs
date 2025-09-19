@@ -2,6 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Local};
 use roxmltree::Document;
 use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
 
 mod platform;
 mod gui;
@@ -18,7 +19,7 @@ use platform::WindowsProcessMemory as PlatformProcessMemory;
 #[cfg(target_os = "macos")]
 use platform::MacProcessMemory as PlatformProcessMemory;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerRecord {
     pub index: u8,
     pub pid_hex: String,
@@ -27,7 +28,7 @@ pub struct PlayerRecord {
     pub name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FetchResult {
     pub players: Vec<PlayerRecord>,
     pub session_id: Option<u32>,
