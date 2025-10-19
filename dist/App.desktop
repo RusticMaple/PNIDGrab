@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=PNIDGrab
+Icon=icon
+Exec=./AppStart
+Categories=Utility;

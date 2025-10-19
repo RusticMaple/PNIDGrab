@@ -75,6 +75,12 @@ cargo build --release
 
 The executable can be found in `target/release/` afterwards.
 
+### Alternatively if you want to build an appimage:
+You need to have docker installed and then simply run: `build_appimage.sh`
+The resulting app image will be located at `pnidgrab.AppImage`
+
+
+
 ## Running the tool
 **IMPORTANT:** NixOS has a quirk where it can't run dynamically linked binaries out of the box. To get around this issue, you need to set up `nix-ld`. A reference implementation can be found [here](https://github.com/JerrySM64/dotfiles/blob/be74d805c2c11034fe121d99a50c94c777870c6f/nixos/fhs-appimage.nix)
 
