@@ -23,3 +23,4 @@ target
 # App image stuff
 appimagebuild
 appimagetool-x86_64.AppImage
+pnidgrab.AppImage
